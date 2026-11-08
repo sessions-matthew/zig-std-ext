@@ -47,7 +47,7 @@ For local development across your workstation:
 Or from a Git repository:
 
 ```bash
-zig fetch --save git+https://github.com/your-org/zig-std-ext.git#main
+zig fetch --save git+https://github.com/sessions-matthew/zig-std-ext.git#main
 ```
 
 ### B. Import in `build.zig`
@@ -125,3 +125,10 @@ zig build test --summary all
 # Build and launch sample echo server
 zig build run-example
 ```
+
+---
+
+## 5. Credits & Attribution
+
+Designed and engineered in collaboration with **Google DeepMind Gemini**.
+

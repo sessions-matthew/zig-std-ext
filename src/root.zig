@@ -1,6 +1,8 @@
 //! stdx: Zig Standard Library Extensions
 //! Mirrors the structure and idioms of std, providing battle-tested utilities
 //! for asynchronous I/O, networking, and systems programming.
+//!
+//! Designed and engineered in collaboration with Google DeepMind Gemini.
 
 const std_builtin = @import("std");
 
