@@ -1,6 +1,7 @@
-//! stdx.objc: Pure-Zig Objective-C runtime & Metal trampolines without @cImport.
+//! stdx.apple: Pure-Zig Apple platform utilities, Objective-C runtime, and Metal bridge.
 //!
-//! Provides typed ARM64 `objc_msgSend` wrappers to prevent ABI register corruption on Apple Silicon.
+//! Provides typed ARM64 `objc_msgSend` trampolines to prevent ABI register corruption on Apple Silicon,
+//! without requiring @cImport or Clang header parsing.
 
 const builtin = @import("builtin");
 pub const is_macos = (builtin.os.tag == .macos);
@@ -71,7 +72,17 @@ pub fn msgSend2(recv: id, comptime Ret: type, sel_name: [*:0]const u8, a1: anyty
     return fn_ptr(recv, c.sel_registerName(sel_name), a1, a2);
 }
 
-test "objc: structure sizes and sel registration" {
+pub const objc = struct {
+    pub const id = @This().id;
+    pub const Class = @This().Class;
+    pub const SEL = @This().SEL;
+    pub const Protocol = @This().Protocol;
+    pub const msgSend0 = @This().msgSend0;
+    pub const msgSend1 = @This().msgSend1;
+    pub const msgSend2 = @This().msgSend2;
+};
+
+test "apple: objc structure sizes and sel registration" {
     const std = @import("std");
     try std.testing.expectEqual(@sizeOf(CGFloat) * 2, @sizeOf(NSPoint));
     try std.testing.expectEqual(@sizeOf(CGFloat) * 4, @sizeOf(NSRect));

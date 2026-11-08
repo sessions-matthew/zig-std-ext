@@ -16,10 +16,13 @@ pub fn build(b: *std.Build) void {
         "net",
         "concurrency",
         "math2d",
-        "objc",
+        "apple",
         "fs",
         "process",
         "state",
+        "diff",
+        "trace",
+        "ansi",
     };
 
     inline for (submodules) |mod_name| {

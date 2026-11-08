@@ -11,7 +11,10 @@
 | **`stdx.net`** | Network Servers & Multiplexing | Single-threaded non-blocking `AsyncServer` (poll/kqueue), decoupled request handlers, zero worker thread overhead. |
 | **`stdx.concurrency`** | Main-Thread Friendly Workers | `AsyncTask(Context, Result)`: lock-free single-flight worker runner with $O(1)$ (< 5 ns) atomic polling for 60/120 FPS game/UI loops. |
 | **`stdx.math2d`** | 2D Geometry & Transforms | Pure-Zig `Vec2`, `Rect`, `StageCamera` (contain/cover/stretch), touch target hit-expansion ($44\times 44\text{ pt}$ Apple HIG), and cubic/back easing. |
-| **`stdx.objc`** | Apple Objective-C & Metal Bridge | Zero-`@cImport` typed ARM64 `objc_msgSend` trampolines, `sel_registerName`, `objc_autoreleasePool`, `NSRect`/`NSPoint`, and Metal device creation. |
+| **`stdx.diff`** | Unified Diffs & Split Pairing | Zero-allocation unified diff & patch parser (`parseUnifiedDiff`), hunk tracking, addition/deletion metrics, and side-by-side split view row builder. |
+| **`stdx.trace`** | Latency Percentiles & Perfetto | Zero-allocation latency statistics (`compute`: P50, P90, P95, P99, mean, stddev), circular `RollingBuffer`, and standard Chrome / Perfetto Catapult JSON trace exporter. |
+| **`stdx.ansi`** | ANSI / VT100 Terminal Parsing | Zero-allocation ANSI escape sequence parser (`Iterator`), sequence stripper (`strip`), terminal display column calculator (`visibleWidth`), and 16/256/24-bit TrueColor SGR formatter (`Style`). |
+| **`stdx.apple`** | Apple OS & Metal Bridge | Zero-`@cImport` typed ARM64 `objc_msgSend` trampolines (`msgSend0/1/2`), `sel_registerName`, `objc_autoreleasePool`, `NSRect`/`NSPoint`, and Metal device creation. Accessible as `stdx.apple` or `stdx.objc`. |
 | **`stdx.fs`** | Universal Portable File I/O | C-`stdio` fallback filesystem (`fopen`, `fread`, `fwrite`, `fseek`, `ftell`, `access`, `mkdir`) for iOS devices/simulators and freestanding targets. |
 | **`stdx.process`** | Non-blocking Pipe Poller | `SubprocessPoller(capacity)`: executes child processes with non-blocking pipes and drains stdout incrementally into fixed buffers without stalling caller threads. |
 | **`stdx.state`** | Type-Hashed State Store | `StateStore`: host-owned React-like `useState` with hierarchical scopes, comptime structural type-hashing (`computeTypeHash`), and `InlineString(capacity)`. |
@@ -24,6 +27,7 @@
 zig-std-ext/
 ├── build.zig               # Exposes 'stdx' and sub-modules
 ├── build.zig.zon           # Package manifest with fingerprint
+├── LICENSE                 # MIT License (2026 Matthew Sessions)
 ├── README.md
 ├── examples/
 │   └── echo_server.zig     # Example single-threaded echo server
@@ -32,7 +36,10 @@ zig-std-ext/
     ├── net/                # AsyncServer, Response
     ├── concurrency/        # AsyncTask(Context, Result)
     ├── math2d/             # Vec2, Rect, StageCamera, Easing
-    ├── objc/               # Pure-Zig typed Objective-C & Metal trampolines
+    ├── diff/               # Unified diff parser & split row builder
+    ├── trace/              # P50/P95/P99 latency stats & Chrome trace exporter
+    ├── ansi/               # ANSI VT100 parser, stripper, visible width, SGR styles
+    ├── apple/              # Pure-Zig typed Objective-C & Metal trampolines
     ├── fs/                 # C-stdio portable filesystem helpers
     ├── process/            # SubprocessPoller non-blocking pipe reader
     └── state/              # StateStore, useState, InlineString, computeTypeHash
@@ -50,7 +57,7 @@ For local development across your workstation:
 .{
     .name = .my_app,
     .version = "0.1.0",
-    .fingerprint = 0x...,
+    .fingerprint = 0x5479474fa354b5eb,
     .dependencies = .{
         .stdx = .{
             .path = "../zig-std-ext",
@@ -124,35 +131,67 @@ if (task.poll()) |result| {
 }
 ```
 
-### B. Single-Threaded Network Server (`stdx.net`)
+### B. Parsing Unified Diffs & Hunks (`stdx.diff`)
 
 ```zig
 const std = @import("std");
 const stdx = @import("stdx");
 
-fn handleClient(res: stdx.net.Response, msg: []const u8) void {
-    res.print("echo: {s}", .{msg}) catch return;
-}
+var parsed: stdx.diff.ParsedDiff = undefined;
+stdx.diff.parseUnifiedDiff(diff_patch_str, &parsed);
 
-pub fn main() !void {
-    var single = std.Io.Threaded.init_single_threaded;
-    const io = single.io();
+std.debug.print("Hunks: {d}, +{d}/-{d}\n", .{
+    parsed.stats.hunks,
+    parsed.stats.additions,
+    parsed.stats.deletions,
+});
 
-    var server = try stdx.net.AsyncServer.init(io, .{ .port = 8080 });
-    defer server.deinit();
-
-    try server.run(handleClient);
+for (parsed.split_rows[0..parsed.split_row_count]) |row| {
+    if (row.is_header) continue;
+    // Render side-by-side left/right diff columns
 }
 ```
 
-### C. Pure-Zig Apple Objective-C Calls (`stdx.objc`)
+### C. Latency Percentiles & Chrome Trace Export (`stdx.trace`)
+
+```zig
+const std = @import("std");
+const stdx = @import("stdx");
+
+// 1. Calculate P50, P90, P95, P99 latency percentiles
+var latencies = [_]u64{ 1200, 1500, 3100, 950, 4200, 1100 };
+const stats = stdx.trace.compute(&latencies);
+std.debug.print("P50: {d} ns, P95: {d} ns, P99: {d} ns\n", .{ stats.p50, stats.p95, stats.p99 });
+
+// 2. Export Chrome / Perfetto timeline events
+var tracer = stdx.trace.TraceCollector.init(allocator);
+defer tracer.deinit();
+
+try tracer.record("frame_render", "gfx", start_ns, end_ns);
+const json_bytes = try tracer.exportJsonAlloc(allocator);
+defer allocator.free(json_bytes);
+```
+
+### D. ANSI Escape Stripping & Visible Terminal Width (`stdx.ansi`)
 
 ```zig
 const stdx = @import("stdx");
-const objc = stdx.objc;
 
-pub fn getSystemDefaultMetalDevice() objc.id {
-    return objc.c.MTLCreateSystemDefaultDevice();
+const styled = "\x1b[1;32mSUCCESS:\x1b[0m 42 tests passed";
+const width = stdx.ansi.visibleWidth(styled); // -> 23 columns
+
+var clean_buf: [128]u8 = undefined;
+const plain = stdx.ansi.strip(styled, &clean_buf); // -> "SUCCESS: 42 tests passed"
+```
+
+### E. Pure-Zig Apple Objective-C Calls (`stdx.apple`)
+
+```zig
+const stdx = @import("stdx");
+const apple = stdx.apple;
+
+pub fn getSystemDefaultMetalDevice() apple.id {
+    return apple.c.MTLCreateSystemDefaultDevice();
 }
 ```
 
@@ -165,6 +204,10 @@ cd ~/Projects/zig-std-ext
 
 # Run unit and integration test suite across all modules
 zig build test --summary all
+
+# Cross-compile for Linux x86_64 and aarch64
+zig build -Dtarget=x86_64-linux
+zig build -Dtarget=aarch64-linux
 
 # Build and launch sample echo server
 zig build run-example
