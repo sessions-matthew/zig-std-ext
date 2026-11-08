@@ -23,6 +23,9 @@ pub fn build(b: *std.Build) void {
         "diff",
         "trace",
         "ansi",
+        "crc",
+        "framing",
+        "rpc",
     };
 
     inline for (submodules) |mod_name| {

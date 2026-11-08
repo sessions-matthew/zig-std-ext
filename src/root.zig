@@ -1,6 +1,6 @@
 //! stdx: Zig Standard Library Extensions
 //! Mirrors the structure and idioms of std, providing battle-tested utilities
-//! for asynchronous I/O, networking, profiling, text parsing, and systems programming.
+//! for asynchronous I/O, networking, profiling, text parsing, embedded IPC, and systems programming.
 //!
 //! Designed and engineered in collaboration with Google DeepMind Gemini.
 
@@ -43,6 +43,15 @@ pub const trace = @import("trace/root.zig");
 /// ANSI escape sequence parser, stripper, visible-width calculator, and SGR style formatter
 pub const ansi = @import("ansi/root.zig");
 
+/// Cyclic Redundancy Check engines (CRC-16 CCITT/XMODEM, CRC-32, CRC-8)
+pub const crc = @import("crc/root.zig");
+
+/// Zero-allocation streaming packet framing, state machine parser, and serializer
+pub const framing = @import("framing/root.zig");
+
+/// Zero-allocation compile-time RPC generator over arbitrary byte transports
+pub const rpc = @import("rpc/root.zig");
+
 test {
     _ = net;
     _ = concurrency;
@@ -54,4 +63,7 @@ test {
     _ = diff;
     _ = trace;
     _ = ansi;
+    _ = crc;
+    _ = framing;
+    _ = rpc;
 }
