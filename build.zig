@@ -11,14 +11,24 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    // Sub-module alias 'net' so callers can do either:
-    // `exe.root_module.addImport("stdx", dep.module("stdx"))` OR
-    // `exe.root_module.addImport("net", dep.module("net"))`
-    _ = b.addModule("net", .{
-        .root_source_file = b.path("src/net/root.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
+    // Sub-module aliases so callers can import specific domains directly:
+    const submodules = [_][]const u8{
+        "net",
+        "concurrency",
+        "math2d",
+        "objc",
+        "fs",
+        "process",
+        "state",
+    };
+
+    inline for (submodules) |mod_name| {
+        _ = b.addModule(mod_name, .{
+            .root_source_file = b.path("src/" ++ mod_name ++ "/root.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+    }
 
     // 2. Unit tests (`zig build test`)
     const tests = b.addTest(.{
@@ -28,8 +38,11 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (target.result.os.tag.isDarwin()) {
+        tests.root_module.linkSystemLibrary("objc", .{});
+    }
     const run_test = b.addRunArtifact(tests);
-    const test_step = b.step("test", "Run stdx unit tests");
+    const test_step = b.step("test", "Run all stdx unit tests");
     test_step.dependOn(&run_test.step);
 
     // 3. Example server (`zig build run-example`)

@@ -1,30 +1,46 @@
 # stdx — Zig Standard Library Extensions
 
-`stdx` is an independent, modular library designed to extend the Zig standard library (`std`) while following its exact architectural patterns, conventions, and idioms.
+`stdx` is a modular, high-performance library extending the Zig standard library (`std`) while following its exact architectural patterns, conventions, and idioms.
 
 ---
 
-## 1. Project Architecture
+## 1. Module Overview
 
-The repository is structured to mirror the layout of Zig's official standard library:
+| Module | Responsibility | Key Features |
+| :--- | :--- | :--- |
+| **`stdx.net`** | Network Servers & Multiplexing | Single-threaded non-blocking `AsyncServer` (poll/kqueue), decoupled request handlers, zero worker thread overhead. |
+| **`stdx.concurrency`** | Main-Thread Friendly Workers | `AsyncTask(Context, Result)`: lock-free single-flight worker runner with $O(1)$ (< 5 ns) atomic polling for 60/120 FPS game/UI loops. |
+| **`stdx.math2d`** | 2D Geometry & Transforms | Pure-Zig `Vec2`, `Rect`, `StageCamera` (contain/cover/stretch), touch target hit-expansion ($44\times 44\text{ pt}$ Apple HIG), and cubic/back easing. |
+| **`stdx.objc`** | Apple Objective-C & Metal Bridge | Zero-`@cImport` typed ARM64 `objc_msgSend` trampolines, `sel_registerName`, `objc_autoreleasePool`, `NSRect`/`NSPoint`, and Metal device creation. |
+| **`stdx.fs`** | Universal Portable File I/O | C-`stdio` fallback filesystem (`fopen`, `fread`, `fwrite`, `fseek`, `ftell`, `access`, `mkdir`) for iOS devices/simulators and freestanding targets. |
+| **`stdx.process`** | Non-blocking Pipe Poller | `SubprocessPoller(capacity)`: executes child processes with non-blocking pipes and drains stdout incrementally into fixed buffers without stalling caller threads. |
+| **`stdx.state`** | Type-Hashed State Store | `StateStore`: host-owned React-like `useState` with hierarchical scopes, comptime structural type-hashing (`computeTypeHash`), and `InlineString(capacity)`. |
+
+---
+
+## 2. Project Architecture
 
 ```text
-~/Projects/zig-std-ext/
-├── build.zig               # Exposes 'stdx' and sub-modules ('net')
+zig-std-ext/
+├── build.zig               # Exposes 'stdx' and sub-modules
 ├── build.zig.zon           # Package manifest with fingerprint
 ├── README.md
 ├── examples/
 │   └── echo_server.zig     # Example single-threaded echo server
 └── src/
-    ├── root.zig            # Top-level stdx namespace (re-exports std + extensions)
-    └── net/                # Networking extension module
-        ├── root.zig        # stdx.net namespace
-        └── Server.zig      # Single-threaded multiplexed AsyncServer (poll/kqueue)
+    ├── root.zig            # Master root (re-exports std + stdx namespaces)
+    ├── net/                # AsyncServer, Response
+    ├── concurrency/        # AsyncTask(Context, Result)
+    ├── math2d/             # Vec2, Rect, StageCamera, Easing
+    ├── objc/               # Pure-Zig typed Objective-C & Metal trampolines
+    ├── fs/                 # C-stdio portable filesystem helpers
+    ├── process/            # SubprocessPoller non-blocking pipe reader
+    └── state/              # StateStore, useState, InlineString, computeTypeHash
 ```
 
 ---
 
-## 2. Using `stdx` in Your Projects
+## 3. Using `stdx` in Your Projects
 
 ### A. Add Dependency in `build.zig.zon`
 
@@ -37,14 +53,14 @@ For local development across your workstation:
     .fingerprint = 0x...,
     .dependencies = .{
         .stdx = .{
-            .path = "../zig-std-ext", // or "~/Projects/zig-std-ext"
+            .path = "../zig-std-ext",
         },
     },
     .paths = .{""},
 }
 ```
 
-Or from a Git repository:
+Or from Git:
 
 ```bash
 zig fetch --save git+https://github.com/sessions-matthew/zig-std-ext.git#main
@@ -83,43 +99,71 @@ pub fn build(b: *std.Build) void {
 
 ---
 
-## 3. Usage Example
+## 4. Usage Examples
 
-In your application code (`src/main.zig`):
+### A. Non-blocking Background Computation (`stdx.concurrency`)
+
+```zig
+const stdx = @import("stdx");
+
+const Worker = struct {
+    fn compute(x: u64) u64 {
+        return x * x;
+    }
+};
+
+var task = stdx.concurrency.AsyncTask(u64, u64).init();
+defer task.deinit();
+
+_ = task.spawn(42, Worker.compute);
+
+// In your 60/120 FPS game/UI tick loop:
+if (task.poll()) |result| {
+    // Result available with 0 main-thread stall
+    _ = result;
+}
+```
+
+### B. Single-Threaded Network Server (`stdx.net`)
 
 ```zig
 const std = @import("std");
 const stdx = @import("stdx");
 
 fn handleClient(res: stdx.net.Response, msg: []const u8) void {
-    std.debug.print("Received: {s}\n", .{msg});
     res.print("echo: {s}", .{msg}) catch return;
 }
 
 pub fn main() !void {
-    // 100% single-threaded runtime (0 worker threads spawned)
     var single = std.Io.Threaded.init_single_threaded;
     const io = single.io();
 
-    var server = try stdx.net.AsyncServer.init(io, .{
-        .port = 8080,
-        .address = "127.0.0.1",
-    });
+    var server = try stdx.net.AsyncServer.init(io, .{ .port = 8080 });
     defer server.deinit();
 
-    std.debug.print("Server listening on 127.0.0.1:8080\n", .{});
     try server.run(handleClient);
+}
+```
+
+### C. Pure-Zig Apple Objective-C Calls (`stdx.objc`)
+
+```zig
+const stdx = @import("stdx");
+const objc = stdx.objc;
+
+pub fn getSystemDefaultMetalDevice() objc.id {
+    return objc.c.MTLCreateSystemDefaultDevice();
 }
 ```
 
 ---
 
-## 4. Development & Testing Commands
+## 5. Development & Testing Commands
 
 ```bash
 cd ~/Projects/zig-std-ext
 
-# Run unit and integration test suite
+# Run unit and integration test suite across all modules
 zig build test --summary all
 
 # Build and launch sample echo server
@@ -128,7 +172,6 @@ zig build run-example
 
 ---
 
-## 5. Credits & Attribution
+## 6. Credits & Attribution
 
 Designed and engineered in collaboration with **Google DeepMind Gemini**.
-
